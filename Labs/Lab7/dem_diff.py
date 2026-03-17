@@ -20,6 +20,7 @@ where:
 
 Requirements: sys, geoutils, xdem
 """
+
 import sys
 import geoutils as gu
 import xdem
@@ -28,29 +29,50 @@ import xdem
 dem1 = xdem.DEM('/Users/miajacoombs/REPOS/GEOS694_ICG/Labs/Lab7/DEMs/ArcticDEM_strips_20170923_EPSG_4326_2m.tif')
 dem2 = xdem.DEM('/Users/miajacoombs/REPOS/GEOS694_ICG/Labs/Lab7/DEMs/Canwell_4Aug25_DTM.tif')
 
+# Visualize the DEMs
 dem1.plot(cmap="RdYlBu", vmin=0, vmax=2000, cbar_title="DEM 2017 (m)")
+dem2.plot(cmap="RdYlBu", vmin=0, vmax=2000, cbar_title="DEM 2025 (m)")
 
 # Get info on each dem
 print("Before corrections:")
 print(dem1.info())
 print(dem2.info())
 
-# Set vertical CRS 
-dem1.set_vcrs("Ellipsoid")  
-dem2.set_vcrs("Ellipsoid")  
+# Assign the correct SOURCE CRS (what the data actually is in)
+dem1.crs = "EPSG:4326"   # ArcticDEM is in WGS84 geographic
+dem2.crs = "EPSG:32606"  # Lidar is already in UTM Zone 6N
+
+# Standardize nodata values
+dem1.nodata = -9999
+dem2.nodata = -9999
+
+# Reproject both DEMs to a common horizontal CRS (UTM Zone 6N)
+target_hcrs = "EPSG:32606"
+dem1_hreproj = dem1.reproject(crs=target_hcrs, resampling="bilinear")
+dem2_hreproj = dem2.reproject(crs=target_hcrs, resampling="bilinear")
+
+print("\nAfter horizontal reprojection:")
+print(dem1_hreproj.info())
+print(dem2_hreproj.info())
+
+# Set vertical CRS
+dem1_hreproj.set_vcrs("Ellipsoid")
+dem2_hreproj.set_vcrs("Ellipsoid")
 
 # Convert vertical coordinate system to EGM96
-dem1.to_vcrs("EGM96") 
-dem2.to_vcrs("EGM96")
+dem1_hreproj.to_vcrs("EGM96")
+dem2_hreproj.to_vcrs("EGM96")
 
-# Reproject so that both dems have the same bounds, resolution, and coordinate system 
-dem1_reproj = dem1.reproject(dem2)
+# Reproject so that both dems have the same bounds, resolution, and pixel alignment
+# dem2 is used as the reference since it is higher resolution (lidar)
+dem1_reproj = dem1_hreproj.reproject(dem2_hreproj, resampling="bilinear")
 
-print('After corrections DEM 1:', dem1_reproj.info())
-print('After corrections DEM 2:', dem2.info())
+print('\nAfter full alignment:')
+print('DEM 1:', dem1_reproj.info())
+print('DEM 2:', dem2_hreproj.info())
 
 # Difference the DEMs
-diff_dem = dem2 - dem1_reproj
+diff_dem = dem2_hreproj - dem1_reproj
 
 diff_dem.info(stats=True)
 
@@ -58,4 +80,4 @@ diff_dem.info(stats=True)
 diff_dem.plot(cmap="RdYlBu", vmin=-20, vmax=20, cbar_title="Elevation differences (m)")
 
 # Save the DEMs to a file
-diff_dem.save("2025lidar_2017arcticdem.tif")
+diff_dem.to_file("2025lidar_2017arcticdemV2.tif")
